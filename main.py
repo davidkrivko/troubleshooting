@@ -62,7 +62,7 @@ async def main():
                             errors = pd.concat([errors, error], ignore_index=True)
 
         i += 1
-        if i == 10000:
+        if i == 10:
             end_time = datetime.datetime.now()
 
             controllers = await init_dataframe()
