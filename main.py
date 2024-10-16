@@ -40,26 +40,28 @@ async def main():
         all_data = update_redis_data(all_data, redis_data)
 
         heat_data = all_data[(all_data["relay"] == 1) & ((now - all_data["timestamp"]).dt.seconds < 120)]
-        heat_data["heat_work"] = heat_data.apply(check_amplitude, axis=1)
 
-        check_data = heat_data[heat_data["heat_work"] == False]
-        if len(check_data) > 0:
-            check_data["error"] = check_data.apply(
-                lambda x: heating_process(x, cool_data), axis=1
-            )
+        if len(heat_data) > 0:
+            heat_data["heat_work"] = heat_data.apply(check_amplitude, axis=1)
 
-            error_data = check_data[check_data["error"] == True]
+            check_data = heat_data[heat_data["heat_work"] == False]
+            if len(check_data) > 0:
+                check_data["error"] = check_data.apply(
+                    lambda x: heating_process(x, cool_data), axis=1
+                )
 
-            if len(error_data) > 0:
-                for _, data in error_data.iterrows():
-                    last_error = errors.loc[errors["serial_num"] == data["serial_num"], "timestamp"]
-                    if not any(last_error) or data["timestamp"] != last_error[0]:
-                        error = await create_heating_notification(data)
+                error_data = check_data[check_data["error"] == True]
 
-                        if error["serial_num"].values[0] in errors["serial_num"].values:
-                            errors.loc[errors["serial_num"] == error["serial_num"], "timestamp"] = error["timestamp"]
-                        else:
-                            errors = pd.concat([errors, error], ignore_index=True)
+                if len(error_data) > 0:
+                    for _, data in error_data.iterrows():
+                        last_error = errors.loc[errors["serial_num"] == data["serial_num"], "timestamp"]
+                        if not any(last_error) or data["timestamp"].date() == datetime.datetime.now().date():
+                            error = await create_heating_notification(data)
+
+                            if error["serial_num"].values[0] in errors["serial_num"].values:
+                                errors.loc[errors["serial_num"] == error["serial_num"], "timestamp"] = error["timestamp"]
+                            else:
+                                errors = pd.concat([errors, error], ignore_index=True)
 
         i += 1
         if i == 10:
