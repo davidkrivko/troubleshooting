@@ -1,10 +1,11 @@
 import datetime
 import json
 
+import aiohttp
 import pandas as pd
 
 from db.utils import create_notification, list_of_controller
-from config import TROUBLE_SHOOTING_DATA
+from config import TROUBLE_SHOOTING_DATA, TELEGRAM_BOT, CHAT_ID
 from redis_dir.daos import redis_dao
 
 
@@ -87,6 +88,16 @@ def update_redis_data(main_data, new_data):
     return updated_data
 
 
+async def send_telegram_message(message):
+    telegram_url = f"https://api.telegram.org/{TELEGRAM_BOT}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": message}
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(telegram_url, data=data) as response:
+            t = await response.text()
+            return t
+
+
 async def create_heating_notification(data: pd.Series):
     now = datetime.datetime.now()
 
@@ -106,5 +117,6 @@ async def create_heating_notification(data: pd.Series):
         },
     }
 
-    await create_notification(payload)
+    await send_telegram_message(f"Heating problem with: {data['serial_num']}\n start heating at: {data['timestamp']}")
+    # await create_notification(payload)
     return pd.DataFrame([{"timestamp": data["timestamp"], "serial_num": data["serial_num"]}])
