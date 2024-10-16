@@ -3,9 +3,12 @@ import datetime
 import logging
 
 import pandas as pd
+import warnings
 
 from dotenv import load_dotenv
 load_dotenv()
+warnings.simplefilter(action='ignore', category=pd.errors.SettingWithCopyWarning)
+
 
 from trouble.utils import (
     init_dataframe,
@@ -59,7 +62,7 @@ async def main():
                             errors = pd.concat([errors, error], ignore_index=True)
 
         i += 1
-        if i == 10:
+        if i == 10000:
             end_time = datetime.datetime.now()
 
             controllers = await init_dataframe()
