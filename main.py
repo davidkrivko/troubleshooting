@@ -36,12 +36,12 @@ async def main():
         cool_data = update_redis_data(cool_data, cool_redis_data)
         all_data = update_redis_data(all_data, redis_data)
 
-        heat_data = all_data[(all_data["relay"] == 1)]   #  & ((now - all_data["timestamp"]).dt.seconds < 120)
-        heat_data.loc[:, "heat_work"] = heat_data.apply(check_amplitude, axis=1)
+        heat_data = all_data[(all_data["relay"] == 1) & ((now - all_data["timestamp"]).dt.seconds < 120)]
+        heat_data["heat_work"] = heat_data.apply(check_amplitude, axis=1)
 
         check_data = heat_data[heat_data["heat_work"] == False]
         if len(check_data) > 0:
-            check_data.loc[:, "error"] = check_data.apply(
+            check_data["error"] = check_data.apply(
                 lambda x: heating_process(x, cool_data), axis=1
             )
 
