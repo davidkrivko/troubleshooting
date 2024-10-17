@@ -55,7 +55,7 @@ async def main():
                 if len(error_data) > 0:
                     for _, data in error_data.iterrows():
                         last_error = errors.loc[errors["serial_num"] == data["serial_num"], "timestamp"]
-                        if not any(last_error) or data["timestamp"].date() == datetime.datetime.now().date():
+                        if not any(last_error) or datetime.datetime.now(tz=datetime.UTC) - data["timestamp"] > datetime.timedelta(hours=1):
                             error = await create_heating_notification(data)
 
                             if error["serial_num"].values[0] in errors["serial_num"].values:
