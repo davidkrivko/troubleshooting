@@ -3,6 +3,7 @@ import json
 
 import aiohttp
 import pandas as pd
+import pytz
 
 from db.utils import create_notification, list_of_controller
 from config import TROUBLE_SHOOTING_DATA, TELEGRAM_BOT, CHAT_ID
@@ -44,7 +45,7 @@ async def get_redis_data(controllers: list):
         (data["serial_num"].notnull()) &
         (data["temperature"].notnull()) &
         (data["relay"].notnull())
-    ]
+        ]
 
     data["relay"] = data["relay"].astype(int)
 
@@ -98,7 +99,7 @@ async def send_telegram_message(message):
             return t
 
 
-async def create_heating_notification(data: pd.Series):
+async def create_heating_notification(data: pd.Series, heat_started: datetime.datetime):
     now = datetime.datetime.now()
 
     payload = {
@@ -117,6 +118,23 @@ async def create_heating_notification(data: pd.Series):
         },
     }
 
-    await send_telegram_message(f"Heating problem with: {data['serial_num']}\n start heating at: {data['timestamp']}")
+    ny_timezone = pytz.timezone("America/New_York")
+    heat_started_ny = heat_started.astimezone(ny_timezone)
+    formatted_date = heat_started_ny.strftime("%Y-%m-%d %H:%M:%S")
+
+    await send_telegram_message(f"Heating problem: {data['serial_num']}\nRelay turned on at: {formatted_date}")
     # await create_notification(payload)
+    return pd.DataFrame([{"timestamp": data["timestamp"], "serial_num": data["serial_num"]}])
+
+
+async def create_heating_notification_2(data: pd.Series, heat_started: datetime.datetime):
+    ny_timezone = pytz.timezone("America/New_York")
+    heat_started_ny = data['timestamp'].astimezone(ny_timezone)
+    formatted_date = heat_started_ny.strftime("%Y-%m-%d %H:%M:%S")
+
+    await send_telegram_message(
+        f"Heat working: {data['serial_num']}\n"
+        f"Heating started at: {formatted_date}"
+        f"Heating takes: {data['timestamp'] - heat_started}"
+    )
     return pd.DataFrame([{"timestamp": data["timestamp"], "serial_num": data["serial_num"]}])
