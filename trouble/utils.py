@@ -134,7 +134,7 @@ async def create_heating_notification_2(data: pd.Series, heat_started: datetime.
 
     await send_telegram_message(
         f"Heat working: {data['serial_num']}\n"
-        f"Heating started at: {formatted_date}"
-        f"Heating takes: {data['timestamp'] - heat_started}"
+        f"Heating started at: {formatted_date}\n"
+        f"Heating takes: {(data['timestamp'] - heat_started).seconds} sec"
     )
     return pd.DataFrame([{"timestamp": data["timestamp"], "serial_num": data["serial_num"]}])

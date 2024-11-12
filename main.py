@@ -74,7 +74,7 @@ async def main():
                             error = await create_heating_notification(
                                 data,
                                 (
-                                    heat_started
+                                    heat_started.iloc[0]
                                     if len(heat_started) > 0
                                     else data["timestamp"]
                                 ),
@@ -96,8 +96,8 @@ async def main():
             ]
             if len(heat_work_errors) > 0:
                 for _, heat_work_error in heat_work_errors.iterrows():
-                    last_error = errors.loc[
-                        errors["serial_num"] == heat_work_error["serial_num"],
+                    last_error = heat_work_errors_history.loc[
+                        heat_work_errors_history["serial_num"] == heat_work_error["serial_num"],
                         "timestamp",
                     ]
 
@@ -105,12 +105,12 @@ async def main():
                         tz=datetime.UTC
                     ) - heat_work_error["timestamp"] > datetime.timedelta(hours=1):
                         heat_started = cool_data.loc[
-                            heat_work_error["serial_num"], "timestamp"
+                            cool_data["serial_num"] == heat_work_error["serial_num"], "timestamp"
                         ]
                         heat_work_error = await create_heating_notification_2(
                             heat_work_error,
                             (
-                                heat_started
+                                heat_started.iloc[0]
                                 if len(heat_started) > 0
                                 else heat_work_error["timestamp"]
                             ),
