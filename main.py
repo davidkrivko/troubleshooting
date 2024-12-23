@@ -122,7 +122,7 @@ async def main():
                         ):
                             heat_work_errors_history.loc[
                                 heat_work_errors_history["serial_num"]
-                                == heat_work_error["serial_num"],
+                                == heat_work_error["serial_num"].iloc[0],
                                 "timestamp",
                             ] = heat_work_error["timestamp"]
                         else:
