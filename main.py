@@ -105,7 +105,7 @@ async def main():
                     ]
 
                     curr_temp = heat_data.loc[
-                        heat_data["serial_num"] == heat_work_error["serial_num"], "t1"
+                        heat_data["serial_num"] == heat_work_error["serial_num"], "temperature"
                     ]
                     if TROUBLE_SHOOTING_DATA["heat_amplitude"][0] <= curr_temp:
                         one_hour = datetime.datetime.now(tz=datetime.UTC) - heat_work_error["timestamp"].replace(tzinfo=pytz.utc) > datetime.timedelta(hours=1)
