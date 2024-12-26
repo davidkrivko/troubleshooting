@@ -1,11 +1,14 @@
 import asyncio
 import datetime
 import logging
+import pytz
 
 import pandas as pd
 import warnings
 
 from dotenv import load_dotenv
+
+from config import TROUBLE_SHOOTING_DATA
 
 load_dotenv()
 warnings.simplefilter(action="ignore", category=pd.errors.SettingWithCopyWarning)
@@ -101,35 +104,40 @@ async def main():
                         "timestamp",
                     ]
 
-                    if not any(last_error) or datetime.datetime.now(
-                        tz=datetime.UTC
-                    ) - heat_work_error["timestamp"] > datetime.timedelta(hours=1):
-                        heat_started = cool_data.loc[
-                            cool_data["serial_num"] == heat_work_error["serial_num"], "timestamp"
-                        ]
-                        heat_work_error = await create_heating_notification_2(
-                            heat_work_error,
-                            (
-                                heat_started.iloc[0]
-                                if len(heat_started) > 0
-                                else heat_work_error["timestamp"]
-                            ),
-                        )
+                    curr_temp = heat_data.loc[
+                        heat_data["serial_num"] == heat_work_error["serial_num"], "t1"
+                    ]
+                    if TROUBLE_SHOOTING_DATA["heat_amplitude"][0] <= curr_temp:
+                        one_hour = datetime.datetime.now(tz=datetime.UTC) - heat_work_error["timestamp"].replace(tzinfo=pytz.utc) > datetime.timedelta(hours=1)
+                        _is_more = datetime.datetime.now(tz=datetime.UTC) > heat_work_error["timestamp"].replace(tzinfo=pytz.utc)
+                        if not any(last_error) or (one_hour and _is_more):
+                            heat_started = cool_data.loc[
+                                cool_data["serial_num"] == heat_work_error["serial_num"], "timestamp"
+                            ]
 
-                        if (
-                            heat_work_error["serial_num"].values[0]
-                            in heat_work_errors_history["serial_num"].values
-                        ):
-                            heat_work_errors_history.loc[
-                                heat_work_errors_history["serial_num"]
-                                == heat_work_error["serial_num"].iloc[0],
-                                "timestamp",
-                            ] = heat_work_error["timestamp"]
-                        else:
-                            heat_work_errors_history = pd.concat(
-                                [heat_work_errors_history, heat_work_error],
-                                ignore_index=True,
+                            heat_work_error = await create_heating_notification_2(
+                                heat_work_error,
+                                (
+                                    heat_started.iloc[0]
+                                    if len(heat_started) > 0
+                                    else heat_work_error["timestamp"]
+                                ),
                             )
+
+                            if (
+                                heat_work_error["serial_num"].values[0]
+                                in heat_work_errors_history["serial_num"].values
+                            ):
+                                heat_work_errors_history.loc[
+                                    heat_work_errors_history["serial_num"]
+                                    == heat_work_error["serial_num"].iloc[0],
+                                    "timestamp",
+                                ] = heat_work_error["timestamp"]
+                            else:
+                                heat_work_errors_history = pd.concat(
+                                    [heat_work_errors_history, heat_work_error],
+                                    ignore_index=True,
+                                )
 
         i += 1
         if i == 10:
