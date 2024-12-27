@@ -96,6 +96,7 @@ async def send_telegram_message(message):
     async with aiohttp.ClientSession() as session:
         async with session.post(telegram_url, data=data) as response:
             t = await response.text()
+            print(t)
             return t
 
 
