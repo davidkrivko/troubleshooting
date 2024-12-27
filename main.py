@@ -21,7 +21,7 @@ from trouble.utils import (
     check_amplitude,
     heating_process,
     create_heating_notification,
-    create_heating_notification_2,
+    create_heating_notification_2, send_telegram_message,
 )
 
 
@@ -34,6 +34,7 @@ async def main():
     errors = pd.DataFrame(columns=["serial_num", "timestamp"])
     heat_work_errors_history = pd.DataFrame(columns=["serial_num", "timestamp"])
 
+    await send_telegram_message("start")
     i = 0
     start_time = datetime.datetime.now()
     while True:
@@ -107,7 +108,7 @@ async def main():
                     curr_temp = heat_data.loc[
                         heat_data["serial_num"] == heat_work_error["serial_num"], "temperature"
                     ]
-                    if TROUBLE_SHOOTING_DATA["heat_amplitude"].values[0] <= int(curr_temp):
+                    if TROUBLE_SHOOTING_DATA["heat_amplitude"][0] <= int(curr_temp.values[0]):
                         one_hour = datetime.datetime.now(tz=datetime.UTC) - heat_work_error["timestamp"].replace(tzinfo=pytz.utc) > datetime.timedelta(hours=1)
                         _is_more = datetime.datetime.now(tz=datetime.UTC) > heat_work_error["timestamp"].replace(tzinfo=pytz.utc)
                         if not any(last_error) or (one_hour and _is_more):
