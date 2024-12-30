@@ -34,9 +34,6 @@ async def main():
     errors = pd.DataFrame(columns=["serial_num", "timestamp"])
     heat_work_errors_history = pd.DataFrame(columns=["serial_num", "timestamp"])
 
-    logging.error("start")
-    await send_telegram_message("start")
-    logging.error("end")
     i = 0
     start_time = datetime.datetime.now()
     while True:
