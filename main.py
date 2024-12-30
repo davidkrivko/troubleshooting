@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import asyncio
 import datetime
 import logging
@@ -6,11 +9,8 @@ import pytz
 import pandas as pd
 import warnings
 
-from dotenv import load_dotenv
-
 from config import TROUBLE_SHOOTING_DATA
 
-load_dotenv()
 warnings.simplefilter(action="ignore", category=pd.errors.SettingWithCopyWarning)
 
 
