@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 
 import aiohttp
 import pandas as pd
@@ -96,7 +97,7 @@ async def send_telegram_message(message):
     async with aiohttp.ClientSession() as session:
         async with session.post(telegram_url, data=data) as response:
             t = await response.text()
-            print("text: ", t, message)
+            logging.error("text: ", t, message)
             return t
 
 
