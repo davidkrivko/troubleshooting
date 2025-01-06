@@ -135,9 +135,11 @@ async def create_heating_notification_2(data: pd.Series, heat_started: datetime.
     heat_started_ny = data['timestamp'].astimezone(ny_timezone)
     formatted_date = heat_started_ny.strftime("%Y-%m-%d %H:%M:%S")
 
+    now = datetime.datetime.now().astimezone(ny_timezone)
+
     await send_telegram_message(
         f"Heat working: {data['serial_num']}\n"
         f"Heating started at: {formatted_date}\n"
-        f"Heating takes: {(data['timestamp'] - heat_started).seconds} sec"
+        f"Heating takes: {(now - heat_started).seconds} sec"
     )
-    return pd.DataFrame([{"timestamp": data["timestamp"], "serial_num": data["serial_num"]}])
+    return pd.DataFrame([{"timestamp": now, "serial_num": data["serial_num"]}])
