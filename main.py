@@ -35,7 +35,7 @@ async def main():
     heat_work_errors_history = pd.DataFrame(columns=["serial_num", "timestamp"])
 
     i = 0
-    start_time = datetime.datetime.now()
+    start_time = datetime.datetime.now(tz=datetime.UTC)
     while True:
 
         redis_data = await get_redis_data(list(controllers.serial_num.str.upper()))
@@ -71,9 +71,7 @@ async def main():
                         heat_started = cool_data.loc[
                             cool_data["serial_num"] == data["serial_num"], "timestamp"
                         ]
-                        if not any(last_error) or datetime.datetime.now(
-                            tz=datetime.UTC
-                        ) - data["timestamp"] > datetime.timedelta(hours=1):
+                        if not any(last_error) or datetime.datetime.now(tz=datetime.UTC) - data["timestamp"] > datetime.timedelta(hours=1):
                             error = await create_heating_notification(
                                 data,
                                 (
@@ -108,8 +106,8 @@ async def main():
                         heat_data["serial_num"] == heat_work_error["serial_num"], "temperature"
                     ]
                     if TROUBLE_SHOOTING_DATA["heat_amplitude"][0] <= int(curr_temp.values[0]):
-                        one_hour = datetime.datetime.now(tz=datetime.UTC) - heat_work_error["timestamp"].replace(tzinfo=pytz.utc) > datetime.timedelta(hours=1)
-                        _is_more = datetime.datetime.now(tz=datetime.UTC) > heat_work_error["timestamp"].replace(tzinfo=pytz.utc)
+                        one_hour = datetime.datetime.now(tz=datetime.UTC) - heat_work_error["timestamp"] > datetime.timedelta(hours=1)
+                        _is_more = datetime.datetime.now(tz=datetime.UTC) > heat_work_error["timestamp"]
                         if not any(last_error) or (one_hour and _is_more):
                             heat_started = cool_data.loc[
                                 cool_data["serial_num"] == heat_work_error["serial_num"], "timestamp"

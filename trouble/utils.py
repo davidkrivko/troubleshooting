@@ -51,6 +51,7 @@ async def get_redis_data(controllers: list):
     data["relay"] = data["relay"].astype(int)
 
     data["timestamp"] = pd.to_datetime(data["timestamp"])
+    data["timestamp"] = data["timestamp"].dt.tz_convert("UTC")
     return data[["serial_num", "relay", "temperature", "timestamp"]]
 
 
@@ -132,14 +133,14 @@ async def create_heating_notification(data: pd.Series, heat_started: datetime.da
 
 async def create_heating_notification_2(data: pd.Series, heat_started: datetime.datetime):
     ny_timezone = pytz.timezone("America/New_York")
+    now = datetime.datetime.now().astimezone(ny_timezone)
+
     heat_started_ny = data['timestamp'].astimezone(ny_timezone)
     formatted_date = heat_started_ny.strftime("%Y-%m-%d %H:%M:%S")
-
-    now = datetime.datetime.now().astimezone(ny_timezone)
 
     await send_telegram_message(
         f"Heat working: {data['serial_num']}\n"
         f"Heating started at: {formatted_date}\n"
         f"Heating takes: {(now - heat_started).seconds} sec"
     )
-    return pd.DataFrame([{"timestamp": now, "serial_num": data["serial_num"]}])
+    return pd.DataFrame([{"timestamp": datetime.datetime.now(tz=datetime.UTC), "serial_num": data["serial_num"]}])
