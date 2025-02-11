@@ -74,13 +74,13 @@ async def main():
                         heat_started = cool_data.loc[
                             cool_data["serial_num"] == data["serial_num"], "timestamp"
                         ]
+                        heat_started = (
+                            heat_started.iloc[0]
+                            if len(heat_started) > 0
+                            else data["timestamp"]
+                        )
                         if not any(last_error) or last_error.iloc[0] - data["timestamp"] > datetime.timedelta(hours=1):
-                            heat_started = (
-                                heat_started.iloc[0]
-                                if len(heat_started) > 0
-                                else data["timestamp"]
-                            )
-                            if heat_started != last_error_heat_started.iloc[0]:
+                            if not any(last_error_heat_started) or heat_started != last_error_heat_started.iloc[0]:
                                 error = await create_heating_notification(
                                     data,
                                     heat_started,
