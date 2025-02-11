@@ -31,8 +31,8 @@ async def main():
     all_data = controllers.copy()
     cool_data = all_data.copy()
 
-    errors = pd.DataFrame(columns=["serial_num", "timestamp"])
-    heat_work_errors_history = pd.DataFrame(columns=["serial_num", "timestamp"])
+    errors = pd.DataFrame(columns=["serial_num", "timestamp", "heat_started"])
+    heat_work_errors_history = pd.DataFrame(columns=["serial_num", "timestamp", "heat_started"])
 
     i = 0
     start_time = datetime.datetime.now(tz=datetime.UTC)
@@ -68,29 +68,38 @@ async def main():
                         last_error = errors.loc[
                             errors["serial_num"] == data["serial_num"], "timestamp"
                         ]
+                        last_error_heat_started = errors.loc[
+                            errors["serial_num"] == data["serial_num"], "heat_started"
+                        ]
                         heat_started = cool_data.loc[
                             cool_data["serial_num"] == data["serial_num"], "timestamp"
                         ]
-                        if not any(last_error) or datetime.datetime.now(tz=datetime.UTC) - data["timestamp"] > datetime.timedelta(hours=1):
-                            error = await create_heating_notification(
-                                data,
-                                (
-                                    heat_started.iloc[0]
-                                    if len(heat_started) > 0
-                                    else data["timestamp"]
-                                ),
+                        if not any(last_error) or last_error.iloc[0] - data["timestamp"] > datetime.timedelta(hours=1):
+                            heat_started = (
+                                heat_started.iloc[0]
+                                if len(heat_started) > 0
+                                else data["timestamp"]
                             )
+                            if heat_started != last_error_heat_started:
+                                error = await create_heating_notification(
+                                    data,
+                                    heat_started,
+                                )
 
-                            if (
-                                error["serial_num"].values[0]
-                                in errors["serial_num"].values
-                            ):
-                                errors.loc[
-                                    errors["serial_num"] == error["serial_num"],
-                                    "timestamp",
-                                ] = error["timestamp"]
-                            else:
-                                errors = pd.concat([errors, error], ignore_index=True)
+                                if (
+                                    error["serial_num"].values[0]
+                                    in errors["serial_num"].values
+                                ):
+                                    errors.loc[
+                                        errors["serial_num"] == error["serial_num"],
+                                        "timestamp",
+                                    ] = error["timestamp"]
+                                    errors.loc[
+                                        errors["serial_num"] == error["serial_num"],
+                                        "heat_started",
+                                    ] = error["heat_started"]
+                                else:
+                                    errors = pd.concat([errors, error], ignore_index=True)
 
             heat_work_errors = errors[
                 errors["serial_num"].isin(heat_work["serial_num"])
@@ -109,17 +118,11 @@ async def main():
                         one_hour = datetime.datetime.now(tz=datetime.UTC) - heat_work_error["timestamp"] > datetime.timedelta(hours=1)
                         _is_more = datetime.datetime.now(tz=datetime.UTC) > heat_work_error["timestamp"]
                         if not any(last_error) or (one_hour and _is_more):
-                            heat_started = cool_data.loc[
-                                cool_data["serial_num"] == heat_work_error["serial_num"], "timestamp"
-                            ]
+                            heat_started = heat_work_error["heat_started"]
 
                             heat_work_error = await create_heating_notification_2(
                                 heat_work_error,
-                                (
-                                    heat_started.iloc[0]
-                                    if len(heat_started) > 0
-                                    else heat_work_error["timestamp"]
-                                ),
+                                heat_started,
                             )
 
                             if (

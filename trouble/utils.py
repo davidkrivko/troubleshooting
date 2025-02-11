@@ -128,7 +128,7 @@ async def create_heating_notification(data: pd.Series, heat_started: datetime.da
 
     await send_telegram_message(f"Heating problem: {data['serial_num']}\nRelay turned on at: {formatted_date}")
     # await create_notification(payload)
-    return pd.DataFrame([{"timestamp": data["timestamp"], "serial_num": data["serial_num"]}])
+    return pd.DataFrame([{"timestamp": data["timestamp"], "serial_num": data["serial_num"], "heat_started": heat_started}])
 
 
 async def create_heating_notification_2(data: pd.Series, heat_started: datetime.datetime):
@@ -143,4 +143,4 @@ async def create_heating_notification_2(data: pd.Series, heat_started: datetime.
         f"Heating started at: {formatted_date}\n"
         f"Heating takes: {(now - heat_started).seconds} sec"
     )
-    return pd.DataFrame([{"timestamp": datetime.datetime.now(tz=datetime.UTC), "serial_num": data["serial_num"]}])
+    return pd.DataFrame([{"timestamp": datetime.datetime.now(tz=datetime.UTC), "serial_num": data["serial_num"], "heat_started": heat_started}])
