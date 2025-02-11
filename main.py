@@ -80,7 +80,7 @@ async def main():
                                 if len(heat_started) > 0
                                 else data["timestamp"]
                             )
-                            if heat_started != last_error_heat_started:
+                            if heat_started != last_error_heat_started.iloc[0]:
                                 error = await create_heating_notification(
                                     data,
                                     heat_started,
