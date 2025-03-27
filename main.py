@@ -31,8 +31,7 @@ async def main():
     all_data = controllers.copy()
     cool_data = all_data.copy()
 
-    errors = pd.DataFrame(columns=["serial_num", "timestamp", "heat_started"])
-    heat_work_errors_history = pd.DataFrame(columns=["serial_num", "timestamp", "heat_started"])
+    messages = pd.DataFrame(columns=["serial_num", "heat_started"])
 
     i = 0
     start_time = datetime.datetime.now(tz=datetime.UTC)
@@ -48,101 +47,46 @@ async def main():
         heat_data = all_data[
             (all_data["relay"] == 1) & ((now - all_data["timestamp"]).dt.seconds < 120)
         ]
-        errors = errors[errors["serial_num"].isin(heat_data["serial_num"])]
 
-        if len(heat_data) > 0:
-            heat_data["heat_work"] = heat_data.apply(check_amplitude, axis=1)
+        cool_data_copy = cool_data.copy()
+        cool_data_copy.rename(columns={"timestamp": "start_heating_time"}, inplace=True)
+        heat_data = pd.merge(
+            heat_data,
+            cool_data_copy[["serial_num", "start_heating_time"]],
+            how="inner",
+        )
 
-            heat_work = heat_data[heat_data["heat_work"] != False]
-            check_data = heat_data[heat_data["heat_work"] == False]
+        for _, row in heat_data.iterrows():
+            serial_num = row['serial_num']
+            start_time = row['start_heating_time']
+            current_temp = int(row['temperature'])
 
-            if len(check_data) > 0:
-                check_data["error"] = check_data.apply(
-                    lambda x: heating_process(x, cool_data), axis=1
-                )
+            if ((messages["serial_num"] == serial_num) & (messages["heat_started"] == start_time)).any():
+                continue
 
-                error_data = check_data[check_data["error"] == True]
-
-                if len(error_data) > 0:
-                    for _, data in error_data.iterrows():
-                        last_error = errors.loc[
-                            errors["serial_num"] == data["serial_num"], "timestamp"
-                        ]
-                        last_error_heat_started = errors.loc[
-                            errors["serial_num"] == data["serial_num"], "heat_started"
-                        ]
-                        heat_started = cool_data.loc[
-                            cool_data["serial_num"] == data["serial_num"], "timestamp"
-                        ]
-                        heat_started = (
-                            heat_started.iloc[0]
-                            if len(heat_started) > 0
-                            else data["timestamp"]
-                        )
-                        if not any(last_error) or last_error.iloc[0] - data["timestamp"] > datetime.timedelta(hours=1):
-                            if not any(last_error_heat_started) or heat_started != last_error_heat_started.iloc[0]:
-                                error = await create_heating_notification(
-                                    data,
-                                    heat_started,
-                                )
-
-                                if (
-                                    error["serial_num"].values[0]
-                                    in errors["serial_num"].values
-                                ):
-                                    errors.loc[
-                                        errors["serial_num"] == error["serial_num"],
-                                        "timestamp",
-                                    ] = error["timestamp"]
-                                    errors.loc[
-                                        errors["serial_num"] == error["serial_num"],
-                                        "heat_started",
-                                    ] = error["heat_started"]
-                                else:
-                                    errors = pd.concat([errors, error], ignore_index=True)
-
-            heat_work_errors = errors[
-                errors["serial_num"].isin(heat_work["serial_num"])
-            ]
-            if len(heat_work_errors) > 0:
-                for _, heat_work_error in heat_work_errors.iterrows():
-                    last_error = heat_work_errors_history.loc[
-                        heat_work_errors_history["serial_num"] == heat_work_error["serial_num"],
-                        "timestamp",
-                    ]
-
-                    curr_temp = heat_data.loc[
-                        heat_data["serial_num"] == heat_work_error["serial_num"], "temperature"
-                    ]
-                    if TROUBLE_SHOOTING_DATA["heat_amplitude"][0] <= int(curr_temp.values[0]):
-                        one_hour = datetime.datetime.now(tz=datetime.UTC) - heat_work_error["timestamp"] > datetime.timedelta(hours=1)
-                        _is_more = datetime.datetime.now(tz=datetime.UTC) > heat_work_error["timestamp"]
-                        if not any(last_error) or (one_hour and _is_more):
-                            heat_started = heat_work_error["heat_started"]
-
-                            heat_work_error = await create_heating_notification_2(
-                                heat_work_error,
-                                heat_started,
-                            )
-
-                            if (
-                                heat_work_error["serial_num"].values[0]
-                                in heat_work_errors_history["serial_num"].values
-                            ):
-                                heat_work_errors_history.loc[
-                                    heat_work_errors_history["serial_num"]
-                                    == heat_work_error["serial_num"].iloc[0],
-                                    "timestamp",
-                                ] = heat_work_error["timestamp"]
-                            else:
-                                heat_work_errors_history = pd.concat(
-                                    [heat_work_errors_history, heat_work_error],
-                                    ignore_index=True,
-                                )
+            elapsed_time = (now - start_time).total_seconds()
+            if current_temp > TROUBLE_SHOOTING_DATA['heat_amplitude']:
+                if elapsed_time <= TROUBLE_SHOOTING_DATA['heating_time']:
+                    await send_telegram_message(f"Boiler {row['boiler_name']} heated up quickly.\nOwner: {row['owner_first_name']}\n\nstart time: {start_time}\n taken time: {elapsed_time}")
+                    messages = pd.concat(
+                        [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time}])],
+                        ignore_index=True)
+                elif TROUBLE_SHOOTING_DATA['heating_time'] < elapsed_time <= TROUBLE_SHOOTING_DATA[
+                    'heating_time_2']:
+                    await send_telegram_message(f"Boiler {row['boiler_name']} heated up slowly.\nOwner: {row['owner_first_name']}\n\nstart time: {start_time}\n taken time: {elapsed_time}")
+                    messages = pd.concat(
+                        [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time}])],
+                        ignore_index=True)
+            else:
+                if elapsed_time > TROUBLE_SHOOTING_DATA['heating_time_2']:
+                    await send_telegram_message(f"Boiler {row['boiler_name']} didn't heat up in time.\nOwner: {row['owner_first_name']}\n\nstart time: {start_time}")
+                    messages = pd.concat(
+                        [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time}])],
+                        ignore_index=True)
 
         i += 1
-        if i == 10000:
-            end_time = datetime.datetime.now()
+        if i == 1000:
+            end_time = datetime.datetime.now(tz=datetime.UTC)
 
             controllers = await init_dataframe()
             logging.error(f"ales good: {end_time - start_time}")
