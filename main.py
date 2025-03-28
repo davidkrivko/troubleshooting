@@ -32,7 +32,7 @@ async def main():
     cool_data = all_data.copy()
 
     messages = pd.DataFrame(columns=["serial_num", "heat_started"])
-    main_message = "Owner: {}\n\nstart time: {}\n taken time: {}\nstart temperature: {}\nend temperature: {}\nserial number: {}"
+    main_message = "Owner: {}\n\nstart time: {}\ntaken time: {}\nstart temperature: {}\nend temperature: {}\nserial number: {}"
 
     i = 0
     start_time = datetime.datetime.now(tz=datetime.UTC)
