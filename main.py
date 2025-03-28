@@ -32,6 +32,7 @@ async def main():
     cool_data = all_data.copy()
 
     messages = pd.DataFrame(columns=["serial_num", "heat_started"])
+    main_message = "Owner: {}\n\nstart time: {}\n taken time: {}\nstart temperature: {}\nend temperature: {}\nserial number: {}"
 
     i = 0
     start_time = datetime.datetime.now(tz=datetime.UTC)
@@ -49,10 +50,10 @@ async def main():
         ]
 
         cool_data_copy = cool_data.copy()
-        cool_data_copy.rename(columns={"timestamp": "start_heating_time"}, inplace=True)
+        cool_data_copy.rename(columns={"timestamp": "start_heating_time", "temperature": "start_temp"}, inplace=True)
         heat_data = pd.merge(
             heat_data,
-            cool_data_copy[["serial_num", "start_heating_time"]],
+            cool_data_copy[["serial_num", "start_heating_time", "start_temp"]],
             how="inner",
         )
 
@@ -64,22 +65,24 @@ async def main():
             if ((messages["serial_num"] == serial_num) & (messages["heat_started"] == start_time)).any():
                 continue
 
-            elapsed_time = (now - start_time).total_seconds()
+            elapsed_time = round((now - start_time).total_seconds())
+            mess = main_message.format(row['owner_first_name'], start_time.strftime("%Y-%m-%d %H:%M:%S"), elapsed_time, row["start_temp"],
+                                       row["temperature"], row["serial_num"])
             if current_temp > TROUBLE_SHOOTING_DATA['heat_amplitude']:
                 if elapsed_time <= TROUBLE_SHOOTING_DATA['heating_time']:
-                    await send_telegram_message(f"Boiler {row['boiler_name']} heated up quickly.\nOwner: {row['owner_first_name']}\n\nstart time: {start_time}\n taken time: {elapsed_time}")
+                    await send_telegram_message(f"{row['boiler_name']} heated up quickly.\n" + mess)
                     messages = pd.concat(
                         [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time}])],
                         ignore_index=True)
                 elif TROUBLE_SHOOTING_DATA['heating_time'] < elapsed_time <= TROUBLE_SHOOTING_DATA[
                     'heating_time_2']:
-                    await send_telegram_message(f"Boiler {row['boiler_name']} heated up slowly.\nOwner: {row['owner_first_name']}\n\nstart time: {start_time}\n taken time: {elapsed_time}")
+                    await send_telegram_message(f"Boiler {row['boiler_name']} heated up slowly.\n" + mess)
                     messages = pd.concat(
                         [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time}])],
                         ignore_index=True)
             else:
                 if elapsed_time > TROUBLE_SHOOTING_DATA['heating_time_2']:
-                    await send_telegram_message(f"Boiler {row['boiler_name']} didn't heat up in time.\nOwner: {row['owner_first_name']}\n\nstart time: {start_time}")
+                    await send_telegram_message(f"Boiler {row['boiler_name']} didn't heat up in time.\n" + mess)
                     messages = pd.concat(
                         [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time}])],
                         ignore_index=True)
