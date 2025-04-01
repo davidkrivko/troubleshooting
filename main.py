@@ -31,7 +31,7 @@ async def main():
     all_data = controllers.copy()
     cool_data = all_data.copy()
 
-    messages = pd.DataFrame(columns=["serial_num", "heat_started"])
+    messages = pd.DataFrame(columns=["serial_num", "heat_started", "type"])
     main_message = "Owner: {}\n\nstart time: {}\ntaken time: {}\nstart temperature: {}\nend temperature: {}\nserial number: {}"
 
     i = 0
@@ -72,19 +72,40 @@ async def main():
                 if elapsed_time <= TROUBLE_SHOOTING_DATA['heating_time']:
                     await send_telegram_message(f"{row['boiler_name']} heated up quickly. 🟢\n" + mess)
                     messages = pd.concat(
-                        [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time}])],
+                        [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time, "type": "green"}])],
                         ignore_index=True)
                 elif TROUBLE_SHOOTING_DATA['heating_time'] < elapsed_time <= TROUBLE_SHOOTING_DATA[
                     'heating_time_2']:
                     await send_telegram_message(f"Boiler {row['boiler_name']} heated up slowly.🟡\n" + mess)
                     messages = pd.concat(
-                        [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time}])],
+                        [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time, "type": "yellow"}])],
                         ignore_index=True)
+
+                    last_three = messages[messages["serial_num"] == serial_num].sort_values(
+                        by="heat_started", ascending=False
+                    ).head(3)
+
+                    if len(last_three) == 3 and all(last_three["type"] == "yellow"):
+                        await send_telegram_message(f"Boiler {row['boiler_name']} is heating slowly consistently. ⚠️")
+
             else:
                 if elapsed_time > TROUBLE_SHOOTING_DATA['heating_time_2']:
-                    await send_telegram_message(f"Boiler {row['boiler_name']} didn't heat up in time.🔴\n" + mess)
+                    today = now.date()
+                    red_messages_today = messages[
+                        (messages["serial_num"] == serial_num) &
+                        (messages["type"] == "red") &
+                        (messages["heat_started"].dt.date == today)
+                        ]
+
+                    # Определяем текст сообщения
+                    if red_messages_today.empty:
+                        message_text = f"Boiler {row['boiler_name']} didn't heat up in time.🔴\n"
+                    else:
+                        message_text = f"Boiler {row['boiler_name']} didn't heat up in time.🔴\n **JUST FOR LOGGING**\n"
+
+                    await send_telegram_message(message_text + mess)
                     messages = pd.concat(
-                        [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time}])],
+                        [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time, "type": "red"}])],
                         ignore_index=True)
 
         i += 1
