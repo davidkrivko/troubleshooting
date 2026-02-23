@@ -1,18 +1,21 @@
+import json
+import os
+
+import requests
 from db.connection import main_async_session_maker
 from db.tables import support_notificationmodel, controller_table, boiler_table, building_table, zip_code_table, \
     users_ownerprofilemodel, users_customuser
 
 
-async def create_notification(data: dict):
-    async with main_async_session_maker() as session:
-        notification_statement = support_notificationmodel.insert().values(
-            **data
-        )
-        try:
-            await session.execute(notification_statement)
-            await session.commit()
-        except Exception as e:
-            return
+def create_notification(data: dict):
+    data["api_key"] = os.environ.get("NOTIFICATION_API_KEY")
+    _url = os.environ.get("BACKEND_URL")
+
+    return requests.post(
+        f"{_url}api/support/notifications/create/",
+        data=json.dumps(data),
+        headers={"Content-Type": "application/json"},
+    )
 
 
 async def list_of_controller(serial_numbers: list = None):

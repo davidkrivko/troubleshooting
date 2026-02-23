@@ -104,17 +104,10 @@ async def send_telegram_message(message):
 
 
 async def create_heating_notification(data: pd.Series, heat_started: datetime.datetime):
-    now = datetime.datetime.now()
-
     payload = {
         "text": f"Boiler {data['boiler_name']}!",
-        "message_type": "E",
-        "type_id": 6,
-        "boiler_id": data["boiler_id"],
-        "created_at": now,
-        "updated_at": now,
-        "message_template": "device_offline",
-        "is_sent": False,
+        "type": 6,
+        "boiler": data["boiler_id"],
         "additional_data": {
             "last_seen": data["timestamp"],
             "device_name": data["serial_num"],

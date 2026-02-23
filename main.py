@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
+
 load_dotenv()
 
+from db.utils import create_notification
 import asyncio
 import datetime
 import logging
@@ -18,10 +20,7 @@ from trouble.utils import (
     init_dataframe,
     get_redis_data,
     update_redis_data,
-    check_amplitude,
-    heating_process,
-    create_heating_notification,
-    create_heating_notification_2, send_telegram_message,
+    send_telegram_message,
 )
 
 
@@ -104,6 +103,18 @@ async def main():
                         message_text = f"Boiler {row['boiler_name']} didn't heat up in time.🔴\n **JUST FOR LOGGING**\n"
 
                     await send_telegram_message(message_text + mess)
+
+                    payload = {
+                        "text": f"Boiler {row['boiler_name']} didn't heat up in time!",
+                        "type": 6,
+                        "boiler": row["boiler_id"],
+                        "additional_data": {
+                            "last_seen": row["timestamp"],
+                            "device_name": row["serial_num"],
+                            "name": row["owner_first_name"],
+                        },
+                    }
+                    await create_notification(payload)
                     messages = pd.concat(
                         [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time, "type": "red"}])],
                         ignore_index=True)
