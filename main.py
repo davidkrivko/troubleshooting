@@ -75,6 +75,17 @@ async def main():
                         ignore_index=True)
                 elif TROUBLE_SHOOTING_DATA['heating_time'] < elapsed_time <= TROUBLE_SHOOTING_DATA[
                     'heating_time_2']:
+                    payload = {
+                        "text": f"Boiler {row['boiler_name']} didn't heat up in time!",
+                        "type": 6,
+                        "boiler": row["boiler_id"],
+                        "additional_data": {
+                            "last_seen": row["timestamp"],
+                            "device_name": row["serial_num"],
+                            "name": row["owner_first_name"],
+                        },
+                    }
+                    await create_notification(payload)
                     await send_telegram_message(f"Boiler {row['boiler_name']} heated up slowly.🟡\n" + mess)
                     messages = pd.concat(
                         [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time, "type": "yellow"}])],
@@ -105,8 +116,8 @@ async def main():
                     await send_telegram_message(message_text + mess)
 
                     payload = {
-                        "text": f"Boiler {row['boiler_name']} didn't heat up in time!",
-                        "type": 6,
+                        "text": f"Boiler {row['boiler_name']} didn't heat up!",
+                        "type": 26,
                         "boiler": row["boiler_id"],
                         "additional_data": {
                             "last_seen": row["timestamp"],
