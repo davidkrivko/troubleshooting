@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 import requests
@@ -11,11 +12,12 @@ def create_notification(data: dict):
     data["api_key"] = os.environ.get("NOTIFICATION_API_KEY")
     _url = os.environ.get("BACKEND_URL")
 
-    return requests.post(
+    response = requests.post(
         f"{_url}api/support/notifications/create/",
         data=json.dumps(data),
         headers={"Content-Type": "application/json"},
     )
+    logging.info(f"response: {response.text}")
 
 
 async def list_of_controller(serial_numbers: list = None):

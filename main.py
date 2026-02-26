@@ -85,7 +85,7 @@ async def main():
                             "name": row["owner_first_name"],
                         },
                     }
-                    await create_notification(payload)
+                    create_notification(payload)
                     await send_telegram_message(f"Boiler {row['boiler_name']} heated up slowly.🟡\n" + mess)
                     messages = pd.concat(
                         [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time, "type": "yellow"}])],
@@ -125,7 +125,7 @@ async def main():
                             "name": row["owner_first_name"],
                         },
                     }
-                    await create_notification(payload)
+                    create_notification(payload)
                     messages = pd.concat(
                         [messages, pd.DataFrame([{"serial_num": serial_num, "heat_started": start_time, "type": "red"}])],
                         ignore_index=True)
