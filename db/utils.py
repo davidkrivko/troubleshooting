@@ -14,7 +14,7 @@ def create_notification(data: dict):
 
     response = requests.post(
         f"{_url}api/support/notifications/create/",
-        data=json.dumps(data),
+        json=data,
         headers={"Content-Type": "application/json"},
     )
     logging.info(f"response: {response.text}")
