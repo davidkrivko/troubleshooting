@@ -49,6 +49,10 @@ async def get_redis_data(controllers: list):
         ]
 
     data["relay"] = data["relay"].astype(int)
+    data["out_heat"] = data["out_heat"].fillna(0).astype(int)
+
+    data["relay"] = ((data["relay"] == 1) | (data["out_heat"] == 1)).astype(int)
+    data.drop(columns=["out_heat"], inplace=True)
 
     data["timestamp"] = pd.to_datetime(data["timestamp"])
     data["timestamp"] = data["timestamp"].dt.tz_convert("UTC")
