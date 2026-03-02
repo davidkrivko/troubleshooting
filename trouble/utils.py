@@ -45,10 +45,10 @@ async def get_redis_data(controllers: list):
     data = data[
         (data["serial_num"].notnull()) &
         (data["temperature"].notnull()) &
-        (data["relay"].notnull())
-        ]
+        (data["relay"].notnull() | data["out_heat"].notnull())
+    ]
 
-    data["relay"] = data["relay"].astype(int)
+    data["relay"] = data["relay"].fillna(0).astype(int)
     data["out_heat"] = data["out_heat"].fillna(0).astype(int)
 
     data["relay"] = ((data["relay"] == 1) | (data["out_heat"] == 1)).astype(int)
