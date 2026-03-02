@@ -80,7 +80,7 @@ async def main():
                         "type": 6,
                         "boiler": row["boiler_id"],
                         "additional_data": {
-                            "last_seen": row["timestamp"],
+                            "last_seen": row["timestamp"].isoformat(),
                             "device_name": row["serial_num"],
                             "name": row["owner_first_name"],
                         },
@@ -120,7 +120,7 @@ async def main():
                         "type": 26,
                         "boiler": row["boiler_id"],
                         "additional_data": {
-                            "last_seen": row["timestamp"],
+                            "last_seen": row["timestamp"].isoformat(),
                             "device_name": row["serial_num"],
                             "name": row["owner_first_name"],
                         },
