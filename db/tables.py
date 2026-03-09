@@ -41,6 +41,8 @@ controller_table = Table(
     Column("systemp_correction_index", Integer, nullable=True),
     Column("owner_id", ForeignKey("users_ownerprofilemodel.id")),
     Column("is_statistic", Boolean),
+    Column("is_learning", Boolean),
+    Column("heating_delta", Integer, nullable=True),
     extend_existing=True,
 )
 

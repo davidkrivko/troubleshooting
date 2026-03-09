@@ -35,6 +35,9 @@ async def list_of_controller(serial_numbers: list = None):
                 users_customuser.c.first_name,
                 boiler_table.c.id,
                 boiler_table.c.name,
+                controller_table.c.is_statistic,
+                controller_table.c.is_learning,
+                controller_table.c.heating_delta,
             )
         )
 

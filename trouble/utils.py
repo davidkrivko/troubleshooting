@@ -8,6 +8,7 @@ import pytz
 
 from db.utils import create_notification, list_of_controller
 from config import TROUBLE_SHOOTING_DATA, TELEGRAM_BOT, CHAT_ID
+from models.state import BoilerState
 from redis_dir.daos import redis_dao
 
 
@@ -38,40 +39,53 @@ def heating_process(ctr_data: pd.Series, historical_data: pd.DataFrame):
         return False
 
 
-async def get_redis_data(controllers: list):
-    controllers = await redis_dao.get_all_paired_relay_data(controllers)
-    data = pd.DataFrame(controllers)
-    data.rename(columns={"sn1": "serial_num", "t1": "temperature"}, inplace=True)
-    data = data[
-        (data["serial_num"].notnull()) &
-        (data["temperature"].notnull()) &
-        (data["relay"].notnull() | data["out_heat"].notnull())
-    ]
+async def parse_redis_data(controllers_keys: list):
+    """Возвращает чистый словарь из Redis вместо тяжелого Pandas DataFrame"""
+    raw_data = await redis_dao.get_all_paired_relay_data(controllers_keys)
 
-    data["relay"] = data["relay"].fillna(0).astype(int)
-    data["out_heat"] = data["out_heat"].fillna(0).astype(int)
+    parsed = {}
+    for data in raw_data:
+        if not data or b"sn1" not in data:
+            continue
 
-    data["relay"] = ((data["relay"] == 1) | (data["out_heat"] == 1)).astype(int)
-    data.drop(columns=["out_heat"], inplace=True)
+        serial_num = data[b"sn1"].decode("utf-8")
+        temp = int(data.get(b"t1", b"0"))
 
-    data["timestamp"] = pd.to_datetime(data["timestamp"])
-    data["timestamp"] = data["timestamp"].dt.tz_convert("UTC")
-    return data[["serial_num", "relay", "temperature", "timestamp"]]
+        relay_val = int(data.get(b"relay", b"0"))
+        out_heat_val = int(data.get(b"out_heat", b"0"))
+        relay_status = 1 if (relay_val == 1 or out_heat_val == 1) else 0
+
+        timestamp_str = data.get(b"timestamp", b"").decode("utf-8")
+        try:
+            timestamp = datetime.datetime.fromisoformat(timestamp_str).replace(tzinfo=datetime.timezone.utc)
+        except ValueError:
+            timestamp = datetime.datetime.now(tz=datetime.timezone.utc)
+
+        parsed[serial_num] = {
+            "relay": relay_status,
+            "temperature": temp,
+            "timestamp": timestamp
+        }
+    return parsed
 
 
-async def init_dataframe():
-    controllers = await list_of_controller()
-    controllers = pd.DataFrame(
-        controllers,
-        columns=["serial_num", "owner_first_name", "boiler_id", "boiler_name"],
-    )
+async def fetch_db_controllers():
+    """Получает список бойлеров из БД"""
+    controllers_raw = await list_of_controller()
 
-    controllers["temperature"] = 0
-    controllers["relay"] = 0
-    controllers["data"] = json.dumps(TROUBLE_SHOOTING_DATA)
-    controllers["timestamp"] = datetime.datetime.now(tz=datetime.UTC)
-
-    return controllers
+    boilers = {}
+    for row in controllers_raw:
+        serial_num = row[0]
+        boilers[serial_num] = BoilerState(
+            serial_num=serial_num,
+            owner_first_name=row[1],
+            boiler_id=row[2],
+            boiler_name=row[3],
+            is_statistic=row[4],
+            is_learning=row[5] if row[5] is not None else False,
+            heating_delta=row[6]
+        )
+    return boilers
 
 
 def update_redis_data(main_data, new_data):
