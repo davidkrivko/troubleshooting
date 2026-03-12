@@ -1,6 +1,7 @@
 import logging
 import os
 import aiohttp
+import json
 
 from config import TELEGRAM_BOT, CHAT_ID
 
@@ -30,6 +31,7 @@ async def create_notification_async(payload: dict):
             ) as response:
                 t = await response.text()
                 logging.info(f"Notification response: {t}")
+                response.raise_for_status()
         except Exception as e:
             logging.error(f"Failed to create notification: {e}")
 
@@ -53,7 +55,8 @@ async def save_learning_data_async(serial_num: str, time_taken: int, start_temp:
             async with session.post(
                     f"{_url}api/devices/controller/heating-delta/",  # Замените на реальный эндпоинт
                     json=payload
-            ):
+            ) as response:
                 logging.info(f"Learning data saved for {serial_num}. Took {time_taken}s")
+                response.raise_for_status()
         except Exception as e:
             logging.error(f"Failed to save learning data: {e}")

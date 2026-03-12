@@ -1,14 +1,13 @@
+import asyncio
+import datetime
+import logging
+
 from dotenv import load_dotenv
+load_dotenv()
 
 from models.state import BoilerState
 from trouble.http_req import save_learning_data_async, create_notification_async
 from trouble.utils import fetch_db_controllers, parse_redis_data, send_telegram_message
-
-load_dotenv()
-
-import asyncio
-import datetime
-import logging
 
 from config import TROUBLE_SHOOTING_DATA
 
@@ -54,6 +53,10 @@ async def main():
                 boiler.current_temp = current_data["temperature"]
                 boiler.last_seen = current_data["timestamp"]
 
+                # Проверка, что контроллер "живой" (данные свежие, < 120 сек назад)
+                if (now - boiler.last_seen).total_seconds() > 120:
+                    continue  # Контроллер отвалился от сети, пропускаем расчеты
+
                 # СОБЫТИЕ: Реле только что включилось (Старт нагрева)
                 if boiler.relay == 1 and prev_relay == 0:
                     boiler.heat_start_time = now
@@ -61,7 +64,7 @@ async def main():
                     boiler.alerts_sent.clear()  # Очищаем историю алертов для нового цикла
 
                     # ПРОВЕРКА РЕЖИМА ОБУЧЕНИЯ:
-                    if boiler.is_statistic and boiler.current_temp <= TROUBLE_SHOOTING_DATA['learning_start_temp']:
+                    if boiler.is_learning and boiler.current_temp <= TROUBLE_SHOOTING_DATA['learning_start_temp']:
                         boiler.learning_active = True
                         logging.info(f"[{serial_num}] Started learning mode cycle.")
 
@@ -71,10 +74,6 @@ async def main():
 
                 # ЛОГИКА АКТИВНОГО НАГРЕВА (Реле включено)
                 if boiler.relay == 1 and boiler.heat_start_time:
-                    # Проверка, что контроллер "живой" (данные свежие, < 120 сек назад)
-                    if (now - boiler.last_seen).total_seconds() > 120:
-                        continue  # Контроллер отвалился от сети, пропускаем расчеты
-
                     elapsed_time = round((now - boiler.heat_start_time).total_seconds())
 
                     mess = main_message_tpl.format(

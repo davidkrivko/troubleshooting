@@ -45,17 +45,20 @@ async def parse_redis_data(controllers_keys: list):
 
     parsed = {}
     for data in raw_data:
-        if not data or b"sn1" not in data:
+        if not data or "sn1" not in data:
             continue
 
-        serial_num = data[b"sn1"].decode("utf-8")
-        temp = int(data.get(b"t1", b"0"))
+        serial_num = data["sn1"]
+        try:
+            temp = int(data.get("t1", "0"))
+        except (ValueError, TypeError):
+            temp = 0
 
-        relay_val = int(data.get(b"relay", b"0"))
-        out_heat_val = int(data.get(b"out_heat", b"0"))
+        relay_val = int(data.get("relay", "0"))
+        out_heat_val = int(data.get("out_heat", "0"))
         relay_status = 1 if (relay_val == 1 or out_heat_val == 1) else 0
 
-        timestamp_str = data.get(b"timestamp", b"").decode("utf-8")
+        timestamp_str = data.get("timestamp", "")
         try:
             timestamp = datetime.datetime.fromisoformat(timestamp_str).replace(tzinfo=datetime.timezone.utc)
         except ValueError:
