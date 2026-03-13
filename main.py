@@ -103,10 +103,11 @@ async def main():
                     if boiler.heating_delta is not None:
                         t1 = boiler.heating_delta
                         t2 = boiler.heating_delta + 120  # +2 минуты (120 сек) сверху для красного
+                    elif boiler.is_learning:
+                        t1 = TROUBLE_SHOOTING_DATA['heating_time']
+                        t2 = TROUBLE_SHOOTING_DATA['heating_time_2']
                     else:
-                        # Стандартные (дефолтные) значения, если delta не задана
-                        t1 = TROUBLE_SHOOTING_DATA['heating_time']  # 120
-                        t2 = TROUBLE_SHOOTING_DATA['heating_time_2']  # 240
+                        continue
 
                     if boiler.current_temp > target_temp:
                         # Нагрелся быстро (до 120 сек)
