@@ -3,6 +3,7 @@ import datetime
 import logging
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from models.state import BoilerState
@@ -12,17 +13,67 @@ from trouble.utils import fetch_db_controllers, parse_redis_data, send_telegram_
 from config import TROUBLE_SHOOTING_DATA
 
 
+def format_seconds(seconds):
+    return f"{seconds // 60}min {seconds % 60}sec"
+
+
+async def send_boiler_alert(boiler, serial_num, elapsed_time, expected_time, alert_type, main_msg, alert_key):
+    """
+    alert_type: 7 (Learning Success), 6 (Yellow/Slow), 26 (Red/No Heat), 'green' (Just Telegram)
+    """
+    elapsed_str = format_seconds(elapsed_time)
+    expected_str = format_seconds(expected_time) if expected_time else ""
+
+    emoji = {"green": "🟢", "yellow": "🟡", "red": "🔴", "learn": "🧠"}.get(alert_key, "")
+
+    notify_type = None  # Для зеленого не создаем нотификацию в БД по вашему коду
+    if alert_key == "learn":
+        text = f"Boiler **{boiler.boiler_name}**. \nLearning data updated, Delta T: *{elapsed_str}*!"
+        tg_prefix = f"🧠 Boiler {boiler.boiler_name} learned! Reached 110°C in {elapsed_str}."
+        notify_type = 7
+    elif alert_key == "green":
+        text = f"Boiler {boiler.boiler_name} heated up quickly. {emoji}"
+        tg_prefix = text
+    elif alert_key == "yellow":
+        text = f"Boiler **{boiler.boiler_name}** took *{elapsed_str}* to heat up. \nExpected time: {expected_str}"
+        tg_prefix = f"Boiler heated up slowly. {emoji}"
+        notify_type = 6
+    elif alert_key == "red":
+        text = f"Boiler **{boiler.boiler_name}**. Never heated up.\nExpected time: {expected_str}"
+        tg_prefix = f"Boiler didn't heat up in time. {emoji}"
+        notify_type = 26
+    else:
+        return
+
+    await send_telegram_message(f"{tg_prefix}\n\n{main_msg}")
+
+    if notify_type:
+        payload = {
+            "text": text,
+            "type": notify_type,
+            "boiler": boiler.boiler_id,
+            "additional_data": {
+                "last_seen": boiler.last_seen.isoformat(),
+                "device_name": serial_num,
+                "name": boiler.owner_first_name,
+            }
+        }
+        await create_notification_async(payload)
+
+    boiler.alerts_sent.add(alert_key)
+
+
 async def main():
     logging.info("Starting IONIQ Monitoring Service...")
-
     boilers: dict[str, BoilerState] = await fetch_db_controllers()
-
     last_db_sync = datetime.datetime.now(tz=datetime.timezone.utc)
 
     main_message_tpl = (
-        "Owner: {owner}\n\nstart time: {start_time}\n"
-        "taken time: {taken}s\nstart temperature: {start_temp}\n"
-        "end temperature: {end_temp}\nserial number: {serial}"
+        "Owner: {owner}\n"
+        "Start: {start_time}\n"
+        "Taken: {taken}s\n"
+        "Temp: {start_temp}°C -> {end_temp}°C\n"
+        "SN: {serial}"
     )
 
     while True:
@@ -31,13 +82,13 @@ async def main():
 
             if (now - last_db_sync).total_seconds() > 3600:
                 new_boilers = await fetch_db_controllers()
-                for sn, boiler in new_boilers.items():
-                    if sn not in boilers:
-                        boilers[sn] = boiler
+                for sn, b in new_boilers.items():
+                    if sn in boilers:
+                        boilers[sn].is_statistic = b.is_statistic
+                        boilers[sn].is_learning = b.is_learning
+                        boilers[sn].heating_delta = b.heating_delta
                     else:
-                        boilers[sn].is_statistic = boiler.is_statistic
-                        boilers[sn].is_learning = boiler.is_learning
-                        boilers[sn].heating_delta = boiler.heating_delta
+                        boilers[sn] = b
                 last_db_sync = now
                 logging.info("Synced controllers from DB.")
 
@@ -45,112 +96,69 @@ async def main():
 
             for serial_num, current_data in redis_data.items():
                 boiler = boilers.get(serial_num)
-                if not boiler:
-                    continue
+                if not boiler: continue
 
                 prev_relay = boiler.relay
                 boiler.relay = current_data["relay"]
                 boiler.current_temp = current_data["temperature"]
                 boiler.last_seen = current_data["timestamp"]
 
-                # Проверка, что контроллер "живой" (данные свежие, < 120 сек назад)
                 if (now - boiler.last_seen).total_seconds() > 120:
-                    continue  # Контроллер отвалился от сети, пропускаем расчеты
+                    continue
 
-                # СОБЫТИЕ: Реле только что включилось (Старт нагрева)
                 if boiler.relay == 1 and prev_relay == 0:
                     boiler.heat_start_time = now
                     boiler.heat_start_temp = boiler.current_temp
-                    boiler.alerts_sent.clear()  # Очищаем историю алертов для нового цикла
-
-                    # ПРОВЕРКА РЕЖИМА ОБУЧЕНИЯ:
+                    boiler.alerts_sent.clear()
                     if boiler.is_learning and boiler.current_temp <= TROUBLE_SHOOTING_DATA['learning_start_temp']:
                         boiler.learning_active = True
-                        logging.info(f"[{serial_num}] Started learning mode cycle.")
+                        logging.info(f"[{serial_num}] Learning mode active.")
 
-                # СОБЫТИЕ: Реле выключилось (Конец нагрева)
                 elif boiler.relay == 0 and prev_relay == 1:
-                    boiler.learning_active = False  # Сбрасываем флаг обучения
+                    boiler.learning_active = False
 
-                # ЛОГИКА АКТИВНОГО НАГРЕВА (Реле включено)
                 if boiler.relay == 1 and boiler.heat_start_time:
-                    elapsed_time = round((now - boiler.heat_start_time).total_seconds())
+                    if boiler.alerts_sent:
+                        continue
 
+                    elapsed_time = round((now - boiler.heat_start_time).total_seconds())
                     mess = main_message_tpl.format(
                         owner=boiler.owner_first_name,
-                        start_time=boiler.heat_start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        start_time=boiler.heat_start_time.strftime("%H:%M:%S"),
                         taken=elapsed_time,
                         start_temp=boiler.heat_start_temp,
                         end_temp=boiler.current_temp,
                         serial=serial_num
                     )
 
-                    # --- 1. ЛОГИКА ОБУЧЕНИЯ (LEARNING MODE) ---
-                    if boiler.learning_active and boiler.current_temp >= TROUBLE_SHOOTING_DATA['learning_target_temp']:
-                        # Бойлер достиг 110 градусов!
-                        await save_learning_data_async(
-                            serial_num=serial_num,
-                            time_taken=elapsed_time,
-                            start_temp=boiler.heat_start_temp,
-                            end_temp=boiler.current_temp
-                        )
-                        boiler.learning_active = False  # Обучение для этого цикла завершено
-                        await send_telegram_message(
-                            f"🧠 Boiler {boiler.boiler_name} learned! Reached 110°C in {elapsed_time}s.\n" + mess)
+                    if boiler.learning_active:
+                        if boiler.current_temp >= TROUBLE_SHOOTING_DATA['learning_target_temp']:
+                            await save_learning_data_async(
+                                serial_num=serial_num,
+                                time_taken=elapsed_time,
+                                start_temp=boiler.heat_start_temp,
+                                end_temp=boiler.current_temp
+                            )
+                            await send_boiler_alert(boiler, serial_num, elapsed_time, None, 7, mess, "learn")
+                            boiler.learning_active = False
+                        continue
 
-                    # --- 2. ЛОГИКА ТРАБЛШУТИНГА (АЛЕРТЫ) ---
                     target_temp = TROUBLE_SHOOTING_DATA['heat_amplitude']
+
                     if boiler.heating_delta is not None:
                         t1 = boiler.heating_delta
-                        t2 = boiler.heating_delta + 120  # +2 минуты (120 сек) сверху для красного
-                    elif boiler.is_learning:
-                        t1 = TROUBLE_SHOOTING_DATA['heating_time']
-                        t2 = TROUBLE_SHOOTING_DATA['heating_time_2']
+                        t2 = boiler.heating_delta + 120
                     else:
                         continue
 
-                    if boiler.current_temp > target_temp:
-                        # Нагрелся быстро (до 120 сек)
-                        if elapsed_time <= t1 and "green" not in boiler.alerts_sent:
-                            await send_telegram_message(f"Boiler {boiler.boiler_name} heated up quickly. 🟢\n" + mess)
-                            boiler.alerts_sent.add("green")
-
-                        # Нагрелся медленно (от 120 до 240 сек)
-                        elif t1 < elapsed_time <= t2 and "yellow" not in boiler.alerts_sent:
-                            payload = {
-                                "text": f"Boiler {boiler.boiler_name} didn't heat up in time!",
-                                "type": 6,
-                                "boiler": boiler.boiler_id,
-                                "additional_data": {
-                                    "last_seen": boiler.last_seen.isoformat(),
-                                    "device_name": serial_num,
-                                    "name": boiler.owner_first_name,
-                                }
-                            }
-                            await create_notification_async(payload)
-                            await send_telegram_message(f"Boiler {boiler.boiler_name} heated up slowly. 🟡\n" + mess)
-                            boiler.alerts_sent.add("yellow")
-
-                            # Здесь можно добавить логику подсчета "3 раза подряд желтый = ⚠️",
-                            # но для этого нужно хранить историю ПРЕДЫДУЩИХ циклов (вне boiler.alerts_sent)
-
+                    if boiler.current_temp >= target_temp:
+                        if elapsed_time <= t1:
+                            await send_boiler_alert(boiler, serial_num, elapsed_time, t1, None, mess, "green")
+                        elif t1 < elapsed_time <= t2:
+                            await send_boiler_alert(boiler, serial_num, elapsed_time, t1, 6, mess, "yellow")
                     else:
-                        # Температура всё еще ниже нормы, а прошло уже больше 240 сек (Авария)
-                        if elapsed_time > t2 and "red" not in boiler.alerts_sent:
-                            payload = {
-                                "text": f"Boiler {boiler.boiler_name} didn't heat up!",
-                                "type": 26,
-                                "boiler": boiler.boiler_id,
-                                "additional_data": {
-                                    "last_seen": boiler.last_seen.isoformat(),
-                                    "device_name": serial_num,
-                                    "name": boiler.owner_first_name,
-                                }
-                            }
-                            await create_notification_async(payload)
-                            await send_telegram_message(
-                                f"Boiler {boiler.boiler_name} didn't heat up in time. 🔴\n" + mess)
-                            boiler.alerts_sent.add("red")
+                        if elapsed_time > t2:
+                            await send_boiler_alert(boiler, serial_num, elapsed_time, t1, 26, mess, "red")
 
         except Exception as e:
             logging.error(f"Error in main loop: {e}", exc_info=True)
